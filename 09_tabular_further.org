@@ -1,0 +1,431 @@
+#+TITLE: 09 Tabular Further
+#+PROPERTY: header-args :tangle 09_tabular_further.py
+
+#+BEGIN_SRC ipython :session :results raw drawer
+#!pip install -Uqq fastbook kaggle waterfallcharts treeinterpreter dtreeviz
+import fastbook
+
+#+END_SRC
+
+#+RESULTS:
+:results:
+# Out[2]:
+:end:
+
+#+BEGIN_SRC ipython :session :results raw drawer
+from fastbook import *
+from kaggle import api
+from pandas.api.types import is_string_dtype, is_numeric_dtype, is_categorical_dtype
+from fastai.tabular.all import *
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.tree import DecisionTreeRegressor
+from dtreeviz.trees import *
+from IPython.display import Image, display_svg, SVG
+
+pd.options.display.max_rows = 20
+pd.options.display.max_columns = 8
+
+#+END_SRC
+
+#+RESULTS:
+:results:
+# Out[3]:
+:end:
+
+#+BEGIN_SRC ipython :session :results raw drawer
+path = URLs.path('icecream-shop-analysis')
+
+#+END_SRC
+
+#+RESULTS:
+:results:
+# Out[6]:
+:end:
+
+#+BEGIN_SRC ipython :session :results raw drawer
+Path.BASE_PATH = path
+
+#+END_SRC
+
+#+RESULTS:
+:results:
+# Out[4]:
+:end:
+
+#+BEGIN_SRC ipython :session :results raw drawer
+if not path.exists():
+    path.mkdir(parents=true)
+    api.dataset_download_files('sunlight1/icecream-shop-analysis', path=path, unzip=True)
+
+    path.ls(file_type='text')
+
+#+END_SRC
+
+#+RESULTS:
+:results:
+# Out[5]:
+: (#4) [Path('icecream_flavors.csv'),Path('icecream_temp.csv'),Path('sales_we.csv'),Path('icecream_sales.csv')]
+:end:
+
+#+BEGIN_SRC ipython :session :results raw drawer
+dt_flv = pd.read_csv(path/"icecream_flavors.csv")
+dt_flv = dt_flv.rename(columns={"week": "saleWeek"}, inplace=False)
+dt_sales = pd.read_csv(path/"icecream_sales.csv")
+dt_sales = dt_sales.rename(columns={"date": "sale"}, inplace=False)
+dt_sales['sales'] = dt_sales['sales'].astype(float)
+dt_sales = add_datepart(dt_sales, "sale")
+
+#+END_SRC
+
+#+RESULTS:
+:results:
+# Out[39]:
+:end:
+
+#+BEGIN_SRC ipython :session :results raw drawer
+dt_sales['saleElapsed'] /= 3600 * 24
+dt_sales = dt_sales.astype({"saleElapsed": "int64", "sales": "float64"})
+dt_sales.head()
+
+#+END_SRC
+
+#+RESULTS:
+:results:
+# Out[40]:
+#+BEGIN_EXAMPLE
+  sales  saleYear  saleMonth  saleWeek  ...  saleIs_quarter_start  \
+  0  59.96      2019          1         1  ...                  True
+  1  67.06      2019          1         1  ...                 False
+  2  74.24      2019          1         1  ...                 False
+  3  78.11      2019          1         1  ...                 False
+  4  84.76      2019          1         1  ...                 False
+
+  saleIs_year_end  saleIs_year_start  saleElapsed
+  0            False               True        17897
+  1            False              False        17898
+  2            False              False        17899
+  3            False              False        17900
+  4            False              False        17901
+
+  [5 rows x 14 columns]
+#+END_EXAMPLE
+:end:
+
+#+BEGIN_SRC ipython :session :results raw drawer
+procs = [Categorify, FillMissing]
+#+END_SRC
+
+#+RESULTS:
+:results:
+# Out[41]:
+:end:
+
+#+BEGIN_SRC ipython :session :results raw drawer
+dep_var = 'sales'
+cond = (dt_sales.saleMonth < 10)
+train_idx = np.where( cond)[0]
+valid_idx = np.where(~cond)[0]
+
+splits = (list(train_idx), list(valid_idx))
+
+#+END_SRC
+
+#+RESULTS:
+:results:
+# Out[42]:
+:end:
+
+#+BEGIN_SRC ipython :session :results raw drawer
+cont, cat = cont_cat_split(dt_sales, 1, dep_var=dep_var)
+cont, cat
+#+END_SRC
+
+#+RESULTS:
+:results:
+# Out[44]:
+#+BEGIN_EXAMPLE
+  (['saleMonth',
+  'saleWeek',
+  'saleDay',
+  'saleDayofweek',
+  'saleDayofyear',
+  'saleElapsed'],
+  ['saleYear',
+  'saleIs_month_end',
+  'saleIs_month_start',
+  'saleIs_quarter_end',
+  'saleIs_quarter_start',
+  'saleIs_year_end',
+  'saleIs_year_start'])
+#+END_EXAMPLE
+:end:
+
+#+BEGIN_SRC ipython :session :results raw drawer
+to = TabularPandas(dt_sales, procs, cat, cont,
+        y_names=dep_var, splits=splits)
+#+END_SRC
+
+#+RESULTS:
+:results:
+# Out[12]:
+:end:
+
+#+BEGIN_SRC ipython :session :results raw drawer
+    len(to.train), len(to.valid)
+
+#+END_SRC
+
+#+RESULTS:
+:results:
+# Out[13]:
+: (273, 92)
+:end:
+
+#+BEGIN_SRC ipython :session :results raw drawer
+    to.show(3)
+#+END_SRC
+
+#+RESULTS:
+:results:
+# Out[14]:
+: <IPython.core.display.HTML object>
+:end:
+
+#+BEGIN_SRC ipython :session :results raw drawer
+save_pickle(path/'to.pkl', to)
+
+#+END_SRC
+
+#+BEGIN_SRC ipython :session :results raw drawer
+to = load_pickle(path/'to.pkl');
+#+END_SRC
+#+RESULTS:
+:results:
+# Out[7]:
+:end:
+
+#+BEGIN_SRC ipython :session :results raw drawer
+xs, y = to.train.xs, to.train.y
+valid_xs, valid_y = to.valid.xs, to.valid.y
+
+#+END_SRC
+
+#+RESULTS:
+:results:
+# Out[8]:
+:end:
+
+#+BEGIN_SRC ipython :session :results raw drawer
+m = DecisionTreeRegressor(min_samples_leaf=8)
+m.fit(xs, y)
+
+#+END_SRC
+
+#+RESULTS:
+:results:
+# Out[14]:
+: DecisionTreeRegressor(min_samples_leaf=8)
+:end:
+
+#+BEGIN_SRC ipython :session :results raw drawer
+def r_mse(pred,y): return round(math.sqrt(((pred-y)**2).mean()), 6)
+def m_rmse(m, xs, y): return r_mse(m.predict(xs), y)
+#+END_SRC
+
+#+RESULTS:
+:results:
+# Out[15]:
+:end:
+
+#+BEGIN_SRC ipython :session :results raw drawer
+m_rmse(m, xs, y)
+#+END_SRC
+
+#+RESULTS:
+:results:
+# Out[16]:
+: 15.71616
+:end:
+
+#+BEGIN_SRC ipython :session :results raw drawer
+samp_idx = np.random.permutation(len(y))[:500]
+#+END_SRC
+
+#+RESULTS:
+:results:
+# Out[17]:
+:end:
+
+#+BEGIN_SRC ipython :session :results raw drawer
+dtreeviz(m, xs.iloc[samp_idx], y.iloc[samp_idx], xs.columns, dep_var,
+    fontname='DejaVu Sans', scale=0.4, label_fontsize=10,
+    orientation='LR')
+#+END_SRC
+
+#+RESULTS:
+:results:
+# Out[18]:
+[[file:./obipy-resources/sC8sId.svg]]
+:end:
+
+* Wyjasnienie
+Sproboje to zrobic tak, aby kazde rozwidlenie skladalo sie z nazwy kolumny ktora uzywamy, jej typu(cont,
+cat), oraz wartosci dzielacej
+
+*JAK ZROBIC PODZIALY, TAK ZEBY NIE ROBIC TWARDYCH KOPII*
+
+**
+#+BEGIN_SRC ipython :session :results raw drawer
+#2
+class Branch:
+    def __init__(self, col_type="", value=0, y=0):
+        self.col_name = ""
+        self.col_type = col_type
+        self.value = value
+        self.y = y
+        self.left, self.right = None, None
+
+    def attach_children(self, left, right):
+        self.left = left
+        self.right = right
+
+    def predict(self, x):
+        if self.left is None:
+            return self.y
+        if col_type == 'cont':
+            if x < value:
+                return self.left.predict(x)
+            return self.right.predict(x)
+        if x != value:
+            return self.left.predict(x)
+        return self.right.predict(x)
+
+class MyTreeRegressor:
+    def __init__(self, min_samples_leaf=8):
+        self.min_samples_leaf = min_samples_leaf
+        self.tree = None
+
+    def fit(self, xs, y):
+        self.tree = Branch(y=xs.mean())
+        self._fit_helper(xs, y, self.tree)
+
+    def _fit_helper(self, xs, y, branch):
+        if len(xs) < self.min_samples_leaf:
+                return
+        cond, minLowerBatch, minUpperBatch, batchVal, minCol = None, None, None, None, None
+        for cName in xs.columns:
+            minUpperCol, bestVal, minLowerCol = None, None, None
+            for val in xs[cName]:
+                if cName in cont:
+                    cond = xs[cName] < val
+                else:
+                    cond = xs[cName] != val
+                lower = xs.loc[ cond]
+                upper = xs.loc[~cond]
+                if len(upper) < self.min_samples_leaf or len(lower) < self.min_samples_leaf:
+                    continue
+                if minLowerCol is None or lower.std().mean() + upper.std().mean() < minLowerCol.std().mean() + minUpperCol.std().mean():
+                    minLowerCol, minUpperCol, bestVal = lower, upper, val
+            if batchVal is None or minLowerCol.std().mean() + minUpperCol.std().mean() < minLowerBatch.std().mean() + minUpperBatch.std().mean():
+                    minLowerBatch, minUpperBatch, batchVal = minLowerCol, minUpperCol, bestVal
+                    minCol = cName
+        left, right = None, None
+        if minCol in cont:
+            cond = xs[minCol] < batchVal
+            branch.col_type = 'cont'
+            left  = Branch(minCol, batchVal, y[ cond].mean())
+            right = Branch(minCol, batchVal, y[~cond].mean())
+        else:
+            cond = xs[minCol] == batchVal
+            branch.col_type = 'cat'
+            left  = Branch(minCol, batchVal, y[ cond].mean())
+            right = Branch(minCol, batchVal, y[~cond].mean())
+        self._fit_helper(xs[ cond], y[ cond], left )
+        self._fit_helper(xs[~cond], y[~cond], right)
+        branch.attach_children(left, right)
+        branch.col_name = minCol
+        print(minCol, len(xs))
+
+    def predict(self, x):
+        return self.tree(x)
+
+#+END_SRC
+
+#+RESULTS:
+:results:
+# Out[9]:
+:end:
+
+
+
+#+BEGIN_SRC ipython :session :results raw drawer
+   mytree = MyTreeRegressor()
+   mytree.fit(xs[:8], y[:8])
+#+END_SRC
+
+#+RESULTS:
+:results:
+# Out[12]:
+:end:
+
+#+BEGIN_SRC ipython :session :results raw drawer
+cond = xs['saleDayofweek'] == 6
+xs[cond]
+#+END_SRC
+
+#+RESULTS:
+:results:
+# Out[38]:
+#+BEGIN_EXAMPLE
+  saleYear  saleIs_month_end  saleIs_month_start  saleIs_quarter_end  ...  \
+  5           1                 1                   1                   1  ...
+  12          1                 1                   1                   1  ...
+  19          1                 1                   1                   1  ...
+  26          1                 1                   1                   1  ...
+  33          1                 1                   1                   1  ...
+  ..        ...               ...                 ...                 ...  ...
+  243         1                 1                   2                   1  ...
+  250         1                 1                   1                   1  ...
+  257         1                 1                   1                   1  ...
+  264         1                 1                   1                   1  ...
+  271         1                 1                   1                   1  ...
+
+  saleDay  saleDayofweek  saleDayofyear  saleElapsed
+  5          6              6              6        17902
+  12        13              6             13        17909
+  19        20              6             20        17916
+  26        27              6             27        17923
+  33         3              6             34        17930
+  ..       ...            ...            ...          ...
+  243        1              6            244        18140
+  250        8              6            251        18147
+  257       15              6            258        18154
+  264       22              6            265        18161
+  271       29              6            272        18168
+
+  [39 rows x 13 columns]
+#+END_EXAMPLE
+:end:
+
+#+BEGIN_SRC ipython :session :results raw drawer
+xs.columns
+#+END_SRC
+
+#+RESULTS:
+:results:
+# Out[24]:
+#+BEGIN_EXAMPLE
+  Index(['saleYear', 'saleIs_month_end', 'saleIs_month_start',
+  'saleIs_quarter_end', 'saleIs_quarter_start', 'saleIs_year_end',
+  'saleIs_year_start', 'saleMonth', 'saleWeek', 'saleDay',
+  'saleDayofweek', 'saleDayofyear', 'saleElapsed'],
+  dtype='object')
+#+END_EXAMPLE
+:end:
+
+#+BEGIN_SRC ipython :session :results raw drawer
+
+#+END_SRC
+#+BEGIN_SRC ipython :session :results raw drawer
+
+#+END_SRC
