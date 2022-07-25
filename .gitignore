@@ -1,5 +1,6 @@
 .gitattributes
 models/
+obipy-resources/
 tmp/
 *.bak
 *.pkl
